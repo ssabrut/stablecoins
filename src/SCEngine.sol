@@ -1,5 +1,28 @@
+// Layout of Contract:
+// version
+// imports
+// interfaces, libraries, contracts
+// errors
+// Type declarations
+// State variables
+// Events
+// Modifiers
+// Functions
+
+// Layout of Functions:
+// constructor
+// receive function (if exists)
+// fallback function (if exists)
+// external
+// public
+// internal
+// private
+// view & pure functions
+
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
+
+import {StableCoin} from "src/StableCoin.sol";
 
 /**
  * @title SCEngine
@@ -18,9 +41,51 @@ pragma solidity ^0.8.19;
  * @notice This contract is VERY loosely based on the MakerDAO DSS (DAI) system.
  */
 contract SCEngine {
+    error SCEngine__NeedsMoreThanZero();
+    error SCEngine__TokenAddressesAndPriceFeedAddressesMustBeSameLength();
+
+    mapping(address token => address priceFeed) private s_priceFeeds;
+
+    StableCoin private immutable i_sc;
+
+    modifier moreThanZero(uint256 _amount) {
+        if (_amount == 0) {
+            revert SCEngine__NeedsMoreThanZero();
+        }
+        _;
+    }
+
+    // modifier isAllowedToken(address _token) {
+
+    // }
+
+    constructor(
+        address[] memory _tokenAddresses,
+        address[] memory _priceFeedAddresses,
+        address _scAddress
+    ) {
+        if (_tokenAddresses.length != _priceFeedAddresses.length) {
+            revert SCEngine__TokenAddressesAndPriceFeedAddressesMustBeSameLength();
+        }
+
+        for (uint256 i = 0; i < _tokenAddresses.length; i++) {
+            s_priceFeeds[_tokenAddresses[i]] = _priceFeedAddresses[i];
+        }
+
+        i_sc = StableCoin(_scAddress);
+    }
+
     function depositCollateralAndMinSC() external {}
 
-    function depositCollateral() external {}
+    /**
+     *
+     * @param _tokenCollateralAddress The address of the token to deposit as collateral
+     * @param _amountCollateral The amount fo the collateral to deposit
+     */
+    function depositCollateral(
+        address _tokenCollateralAddress,
+        uint256 _amountCollateral
+    ) external moreThanZero(_amountCollateral) {}
 
     function redeemCollateralForSC() external {}
 
