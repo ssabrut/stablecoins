@@ -48,6 +48,7 @@ contract SCEngine is ReentrancyGuard {
     error SCEngine__TokenAddressesAndPriceFeedAddressesMustBeSameLength();
     error SCEngine__NotAllowedToken();
     error SCEngine__TransferFailed();
+    error SCEngine__MintFailed();
     error SCEngine__BreaksHealthFactor(uint256 _healthFactor);
 
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
@@ -127,6 +128,11 @@ contract SCEngine is ReentrancyGuard {
     function mintSC(uint256 _amountSCToMint) external moreThanZero(_amountSCToMint) nonReentrant {
         s_SCMinted[msg.sender] += _amountSCToMint;
         _revertIfHealthFactorIsBroken(msg.sender);
+
+        bool minted = i_sc.mint(msg.sender, _amountSCToMint);
+        if (!minted) {
+            revert SCEngine__MintFailed();
+        }
     }
 
     function liquidate() external {}
