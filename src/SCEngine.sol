@@ -48,9 +48,13 @@ contract SCEngine is ReentrancyGuard {
     error SCEngine__TokenAddressesAndPriceFeedAddressesMustBeSameLength();
     error SCEngine__NotAllowedToken();
     error SCEngine__TransferFailed();
+    error SCEngine__BreaksHealthFactor(uint256 _healthFactor);
 
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
+    uint256 private constant LIQUIDATION_THRESHOLD = 50;
+    uint256 private constant LIQUIDATION_PRECISION = 100;
+    uint256 private constant MIN_HEALTH_FACTOR = 1;
     mapping(address token => address priceFeed) private s_priceFeeds;
     mapping(address user => mapping(address token => uint256 amount)) private s_collateralDeposited;
     mapping(address user => uint256 amountSCMinted) private s_SCMinted;
@@ -135,12 +139,14 @@ contract SCEngine is ReentrancyGuard {
         return ((uint256(price) * ADDITIONAL_FEED_PRECISION) * _amount) / PRECISION;
     }
 
-    function getAccountCollateralValue(address _user) public view returns (uint256) {
+    function getAccountCollateralValue(address _user) public view returns (uint256 totalCollateralInUsd) {
         for (uint256 i = 0; i < s_collateralTokens.length; i++) {
             address token = s_collateralTokens[i];
             uint256 amount = s_collateralDeposited[_user][token];
-            // total
+            totalCollateralInUsd += getUsdValue(token, amount);
         }
+
+        return totalCollateralInUsd;
     }
 
     function _getAccountInformation(address _user)
@@ -159,7 +165,15 @@ contract SCEngine is ReentrancyGuard {
      */
     function _healthFactor(address _user) internal view returns (uint256) {
         (uint256 totalSCMinted, uint256 collateralValueInUsd) = _getAccountInformation(_user);
+        uint256 collateralAdjustedForThreshold = (collateralValueInUsd * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
+
+        return (collateralAdjustedForThreshold * PRECISION) / totalSCMinted;
     }
 
-    function _revertIfHealthFactorIsBroken(address _user) internal view {}
+    function _revertIfHealthFactorIsBroken(address _user) internal view {
+        uint256 healthFactor = _healthFactor(_user);
+        if (healthFactor < MIN_HEALTH_FACTOR) {
+            revert SCEngine__BreaksHealthFactor(healthFactor);
+        }
+    }
 }
