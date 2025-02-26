@@ -25,6 +25,7 @@ pragma solidity ^0.8.19;
 import {StableCoin} from "src/StableCoin.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 /**
  * @title SCEngine
@@ -48,8 +49,12 @@ contract SCEngine is ReentrancyGuard {
     error SCEngine__NotAllowedToken();
     error SCEngine__TransferFailed();
 
+    uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
+    uint256 private constant PRECISION = 1e18;
     mapping(address token => address priceFeed) private s_priceFeeds;
     mapping(address user => mapping(address token => uint256 amount)) private s_collateralDeposited;
+    mapping(address user => uint256 amountSCMinted) private s_SCMinted;
+    address[] private s_collateralTokens;
     StableCoin private immutable i_sc;
 
     event CollateralDeposited(address indexed user, address indexed token, uint256 indexed amount);
@@ -76,6 +81,7 @@ contract SCEngine is ReentrancyGuard {
 
         for (uint256 i = 0; i < _tokenAddresses.length; i++) {
             s_priceFeeds[_tokenAddresses[i]] = _priceFeedAddresses[i];
+            s_collateralTokens.push(_tokenAddresses[i]);
         }
 
         i_sc = StableCoin(_scAddress);
@@ -108,9 +114,52 @@ contract SCEngine is ReentrancyGuard {
 
     function burnSC() external {}
 
-    function mintSC() external {}
+    /**
+     *
+     * @notice follows CEI
+     * @param _amountSCToMint The amount of stable coin to mint
+     * @notice They must have more collateral value more than the minimum threshold
+     */
+    function mintSC(uint256 _amountSCToMint) external moreThanZero(_amountSCToMint) nonReentrant {
+        s_SCMinted[msg.sender] += _amountSCToMint;
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
 
     function liquidate() external {}
 
     function getHealthFactor() external view {}
+
+    function getUsdValue(address _token, uint256 _amount) public view returns (uint256) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[_token]);
+        (, int256 price,,,) = priceFeed.latestRoundData();
+        return ((uint256(price) * ADDITIONAL_FEED_PRECISION) * _amount) / PRECISION;
+    }
+
+    function getAccountCollateralValue(address _user) public view returns (uint256) {
+        for (uint256 i = 0; i < s_collateralTokens.length; i++) {
+            address token = s_collateralTokens[i];
+            uint256 amount = s_collateralDeposited[_user][token];
+            // total
+        }
+    }
+
+    function _getAccountInformation(address _user)
+        internal
+        view
+        returns (uint256 totalSCMinted, uint256 collateralValueInUsd)
+    {
+        totalSCMinted = s_SCMinted[_user];
+        collateralValueInUsd = getAccountCollateralValue(_user);
+    }
+
+    /**
+     * Returns how close to liquidation a user is
+     * if a user goes below 1, they get liquidated
+     * @param _user The user that want to be checked
+     */
+    function _healthFactor(address _user) internal view returns (uint256) {
+        (uint256 totalSCMinted, uint256 collateralValueInUsd) = _getAccountInformation(_user);
+    }
+
+    function _revertIfHealthFactorIsBroken(address _user) internal view {}
 }
