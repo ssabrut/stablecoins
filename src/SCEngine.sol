@@ -23,6 +23,8 @@
 pragma solidity ^0.8.19;
 
 import {StableCoin} from "src/StableCoin.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title SCEngine
@@ -40,13 +42,17 @@ import {StableCoin} from "src/StableCoin.sol";
  * @notice This contract is the core of the SC system. It handles all the logic for mining and redeeming SC, as well as the depositing and withdrawing collateral.
  * @notice This contract is VERY loosely based on the MakerDAO DSS (DAI) system.
  */
-contract SCEngine {
+contract SCEngine is ReentrancyGuard {
     error SCEngine__NeedsMoreThanZero();
     error SCEngine__TokenAddressesAndPriceFeedAddressesMustBeSameLength();
+    error SCEngine__NotAllowedToken();
+    error SCEngine__TransferFailed();
 
     mapping(address token => address priceFeed) private s_priceFeeds;
-
+    mapping(address user => mapping(address token => uint256 amount)) private s_collateralDeposited;
     StableCoin private immutable i_sc;
+
+    event CollateralDeposited(address indexed user, address indexed token, uint256 indexed amount);
 
     modifier moreThanZero(uint256 _amount) {
         if (_amount == 0) {
@@ -55,15 +61,15 @@ contract SCEngine {
         _;
     }
 
-    // modifier isAllowedToken(address _token) {
+    modifier isAllowedToken(address _token) {
+        if (s_priceFeeds[_token] == address(0)) {
+            revert SCEngine__NotAllowedToken();
+        }
 
-    // }
+        _;
+    }
 
-    constructor(
-        address[] memory _tokenAddresses,
-        address[] memory _priceFeedAddresses,
-        address _scAddress
-    ) {
+    constructor(address[] memory _tokenAddresses, address[] memory _priceFeedAddresses, address _scAddress) {
         if (_tokenAddresses.length != _priceFeedAddresses.length) {
             revert SCEngine__TokenAddressesAndPriceFeedAddressesMustBeSameLength();
         }
@@ -75,17 +81,26 @@ contract SCEngine {
         i_sc = StableCoin(_scAddress);
     }
 
-    function depositCollateralAndMinSC() external {}
+    function depositCollateralAndMintSC() external {}
 
     /**
-     *
+     * @notice follows CEI
      * @param _tokenCollateralAddress The address of the token to deposit as collateral
      * @param _amountCollateral The amount fo the collateral to deposit
      */
-    function depositCollateral(
-        address _tokenCollateralAddress,
-        uint256 _amountCollateral
-    ) external moreThanZero(_amountCollateral) {}
+    function depositCollateral(address _tokenCollateralAddress, uint256 _amountCollateral)
+        external
+        moreThanZero(_amountCollateral)
+        isAllowedToken(_tokenCollateralAddress)
+        nonReentrant
+    {
+        s_collateralDeposited[msg.sender][_tokenCollateralAddress] += _amountCollateral;
+        emit CollateralDeposited(msg.sender, _tokenCollateralAddress, _amountCollateral);
+        bool success = IERC20(_tokenCollateralAddress).transferFrom(msg.sender, address(this), _amountCollateral);
+        if (!success) {
+            revert SCEngine__TransferFailed();
+        }
+    }
 
     function redeemCollateralForSC() external {}
 
