@@ -92,7 +92,29 @@ contract SCEngine is ReentrancyGuard {
         i_sc = StableCoin(_scAddress);
     }
 
-    function depositCollateralAndMintSC() external {}
+    /**
+     *
+     * @param _tokenAddress The address of the token to deposit as collateral
+     * @param _amountCollateral The amount of collateral to deposit
+     * @param _amountToMint The amount of stable coin to mint
+     * @notice This function will deposit your collateral and mint SC in one transaction
+     */
+    function depositCollateralAndMintSC(address _tokenAddress, uint256 _amountCollateral, uint256 _amountToMint)
+        external
+    {
+        depositCollateral(_tokenAddress, _amountCollateral);
+        mintSC(_amountToMint);
+    }
+
+    function redeemCollateralForSC() external {}
+
+    function redeemCollateral() external {}
+
+    function burnSC() external {}
+
+    function liquidate() external {}
+
+    function getHealthFactor() external view {}
 
     /**
      * @notice follows CEI
@@ -100,7 +122,7 @@ contract SCEngine is ReentrancyGuard {
      * @param _amountCollateral The amount fo the collateral to deposit
      */
     function depositCollateral(address _tokenCollateralAddress, uint256 _amountCollateral)
-        external
+        public
         moreThanZero(_amountCollateral)
         isAllowedToken(_tokenCollateralAddress)
         nonReentrant
@@ -113,19 +135,13 @@ contract SCEngine is ReentrancyGuard {
         }
     }
 
-    function redeemCollateralForSC() external {}
-
-    function redeemCollateral() external {}
-
-    function burnSC() external {}
-
     /**
      *
      * @notice follows CEI
      * @param _amountSCToMint The amount of stable coin to mint
      * @notice They must have more collateral value more than the minimum threshold
      */
-    function mintSC(uint256 _amountSCToMint) external moreThanZero(_amountSCToMint) nonReentrant {
+    function mintSC(uint256 _amountSCToMint) public moreThanZero(_amountSCToMint) nonReentrant {
         s_SCMinted[msg.sender] += _amountSCToMint;
         _revertIfHealthFactorIsBroken(msg.sender);
 
@@ -134,10 +150,6 @@ contract SCEngine is ReentrancyGuard {
             revert SCEngine__MintFailed();
         }
     }
-
-    function liquidate() external {}
-
-    function getHealthFactor() external view {}
 
     function getUsdValue(address _token, uint256 _amount) public view returns (uint256) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[_token]);
