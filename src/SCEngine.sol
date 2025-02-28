@@ -107,10 +107,31 @@ contract SCEngine is ReentrancyGuard {
         mintSC(_amountToMint);
     }
 
-    function redeemCollateralForSC() external {}
+    /**
+     * @notice Redeems collateral by burning StableCoin tokens
+     * @dev This function combines burning StableCoin tokens and redeeming collateral in a single transaction
+     * @param _tokenAddress The address of the collateral token to redeem
+     * @param _amountCollateral The amount of collateral to redeem
+     * @param _amountToBurn The amount of StableCoin tokens to burn
+     * @custom:requirements User must have sufficient StableCoin balance and the contract must have sufficient collateral
+     */
+    function redeemCollateralForSC(address _tokenAddress, uint256 _amountCollateral, uint256 _amountToBurn) external {
+        burnSC(_amountToBurn);
+        redeemCollateral(_tokenAddress, _amountCollateral);
+    }
 
+    /**
+     * @notice Allows a user to redeem collateral that has been deposited
+     * @dev This function will revert if the transfer fails or if redeeming the collateral would break the user's health factor
+     * @param _tokenAddress The address of the collateral token to redeem
+     * @param _amountCollateral The amount of collateral to redeem
+     * @custom:modifier moreThanZero Ensures the collateral amount is greater than zero
+     * @custom:modifier nonReentrant Prevents reentrancy attacks
+     * @custom:emits CollateralRedeemed when collateral is successfully redeemed
+     * @custom:error SCEngine__TransferFailed If the token transfer fails
+     */
     function redeemCollateral(address _tokenAddress, uint256 _amountCollateral)
-        external
+        public
         moreThanZero(_amountCollateral)
         nonReentrant
     {
@@ -125,7 +146,24 @@ contract SCEngine is ReentrancyGuard {
         _revertIfHealthFactorIsBroken(msg.sender);
     }
 
-    function burnSC() external {}
+    /**
+     * @notice Burns a specified amount of stable coins from the sender's balance.
+     * @dev This function decreases the sender's minted SC balance, transfers the tokens to this contract,
+     *      and then burns them. It also checks that the sender's health factor remains valid after the operation.
+     * @param _amount The amount of stable coins to burn
+     * @custom:modifier moreThanZero Ensures the amount is greater than zero
+     * @custom:throws SCEngine__TransferFailed if the token transfer fails
+     */
+    function burnSC(uint256 _amount) public moreThanZero(_amount) {
+        s_SCMinted[msg.sender] -= _amount;
+        bool success = i_sc.transferFrom(msg.sender, address(this), _amount);
+        if (!success) {
+            revert SCEngine__TransferFailed();
+        }
+
+        i_sc.burn(_amount);
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
 
     function liquidate() external {}
 
