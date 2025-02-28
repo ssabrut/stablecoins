@@ -63,6 +63,7 @@ contract SCEngine is ReentrancyGuard {
     StableCoin private immutable i_sc;
 
     event CollateralDeposited(address indexed user, address indexed token, uint256 indexed amount);
+    event CollateralRedeemed(address indexed user, address indexed token, uint256 indexed amount);
 
     modifier moreThanZero(uint256 _amount) {
         if (_amount == 0) {
@@ -108,7 +109,21 @@ contract SCEngine is ReentrancyGuard {
 
     function redeemCollateralForSC() external {}
 
-    function redeemCollateral() external {}
+    function redeemCollateral(address _tokenAddress, uint256 _amountCollateral)
+        external
+        moreThanZero(_amountCollateral)
+        nonReentrant
+    {
+        s_collateralDeposited[msg.sender][_tokenAddress] -= _amountCollateral;
+        emit CollateralRedeemed(msg.sender, _tokenAddress, _amountCollateral);
+
+        bool success = IERC20(_tokenAddress).transfer(msg.sender, _amountCollateral);
+        if (!success) {
+            revert SCEngine__TransferFailed();
+        }
+
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
 
     function burnSC() external {}
 
